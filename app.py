@@ -227,10 +227,9 @@ with tab5:
     st.write(f"Days dropped because at least one series had no price: {len(dropped)}")
     if len(dropped) > 0:
         st.dataframe(dropped, hide_index=True)
-    st.caption("The very first day is also removed, because it has no previous day to calculate a return from.")    
-
+        
     st.subheader("Missing values per column")
     st.dataframe(view.isna().sum().rename("missing"))
     rejected = "no update recorded yet" if last_log is None else last_log["rows_rejected"]
-    st.write(f"Rows rejected by Pydantic validation (last update): {rejected}")
+    st.write(f"Rows rejected by validation: {rejected}")
     st.write(f"Rows in the selected range: {len(view)}")

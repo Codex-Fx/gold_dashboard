@@ -62,7 +62,7 @@ def start_update():
 
 # ---------------- sidebar: data updates ----------------
 st.sidebar.header("Data updates")
-auto_update = st.sidebar.toggle("Auto-update (previous day + today)", value=True)
+auto_update = st.sidebar.toggle("Auto-update", value=True)
 if st.sidebar.button("Update now"):
     start_update()
 
@@ -84,7 +84,7 @@ if last_log is None:
     st.sidebar.caption("No update recorded yet.")
 elif last_log["status"] == "OK":
     when = pd.to_datetime(last_log["ran_at"]).strftime("%Y-%m-%d %H:%M")
-    st.sidebar.caption(f"Last update OK: {when} UTC. Next about every 6 h.")
+    st.sidebar.caption(f"Last update at {when} UTC. Next about every 6 h.")
 else:
     st.sidebar.error("Last update FAILED: " + str(last_log["message"]))
 
@@ -92,12 +92,9 @@ else:
 try:
     data = get_data()
 except Exception as error:
-    st.error(f"Could not read the data from Supabase: {error}")
+    st.error(f"Could not read the data from Database: {error}")
     st.stop()
 
-if data is None:
-    st.warning("The database is empty. Run `python etl.py` once, then reload this page.")
-    st.stop()
 
 # ---------------- sidebar: filters ----------------
 st.sidebar.header("Filters")
@@ -110,23 +107,17 @@ if len(date_range) != 2:
     st.stop()
 
 view = data.loc[str(date_range[0]):str(date_range[1])]
-if len(view) < 30:
-    st.warning("Please select at least 30 days of data.")
-    st.stop()
 
-window = st.sidebar.slider("Rolling correlation window (days)", 20, 120, 60)
+window = st.sidebar.slider("Rolling correlation window (days)", 30, 120, 60)
 
 st.sidebar.header("Current price")
-st.sidebar.caption("Prices are re-read from Supabase every 5 minutes.")
-if st.sidebar.button("Reload from Supabase now"):
+if st.sidebar.button("Reload from Database"):
     get_data.clear()
     get_last_log.clear()
     st.rerun()
 
 # ---------------- header ----------------
 st.title("Gold (XAUUSD) vs AUDUSD, USDJPY and DXY")
-st.caption("Source: Massive.com daily bars, stored in Supabase. "
-           "DXY is a synthetic index built from its six component pairs.")
 
 columns = st.columns(4)
 for column, name in zip(columns, analysis.SERIES):
@@ -135,8 +126,7 @@ for column, name in zip(columns, analysis.SERIES):
     change = (latest / previous - 1) * 100
     column.metric(name, f"{latest:,.{DECIMALS[name]}f}", f"{change:+.2f}% vs prev close")
 
-st.caption(f"END-OF-DAY (not live) | as of {view.index[-1].date()} | "
-           "Showing last stored daily close.")
+st.caption(f"Prices As of {view.index[-1].date()} ")
 
 # ---------------- tabs ----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
@@ -149,8 +139,8 @@ with tab1:
     st.dataframe(analysis.summary_stats(view))
 
 with tab2:
-    st.caption(f"Trailing windows ending at the last selected date ({view.index[-1].date()}). "
-               f"Whole history = everything selected: {view.index[0].date()} to {view.index[-1].date()}.")
+    st.caption(f"Each period counts back from the latest date, ({view.index[-1].date()}). "
+               f"Whole history is from {view.index[0].date()} to {view.index[-1].date()}.")
     periods = analysis.period_table(view)
     order = list(analysis.PERIODS)
 
@@ -168,10 +158,8 @@ with tab2:
     vol_table = periods.pivot(index="period", columns="series", values="volatility_ann_pct")
     st.dataframe(vol_table.loc[order].round(2))
 
-    st.subheader("Gold's correlation with the others (daily returns)")
+    st.subheader("Gold's correlation with the others")
     st.dataframe(analysis.gold_correlation_table(view).round(3), hide_index=True)
-    st.warning("The 7-day window has only about 7 bars. A correlation from so few points "
-               "is noise, not evidence. Trust windows with 60+ days.")
 
     st.subheader("Full detail")
     st.dataframe(periods.round(4), hide_index=True)

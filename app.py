@@ -29,8 +29,8 @@ DECIMALS = {"XAUUSD": 3, "AUDUSD": 5, "USDJPY": 3, "DXY": 3}
 def get_data():
     prices = db.load_prices()
     if prices.empty:
-        return None
-    return analysis.prepare(prices)
+        return None, None
+    return analysis.prepare(prices), analysis.dropped_days(prices)
 
 
 @st.cache_data(ttl=30)
@@ -90,9 +90,12 @@ else:
 
 # ---------------- load the data ----------------
 try:
-    data = get_data()
+    data, dropped = get_data()
 except Exception as error:
     st.error(f"Could not read the data from Database: {error}")
+    st.stop()
+if data is None:
+    st.warning("The database is empty. Click 'Update now' in the sidebar and reload in a minute.")
     st.stop()
 
 
@@ -220,6 +223,12 @@ with tab4:
     st.bar_chart(lags)
 
 with tab5:
+    st.subheader("Days dropped (a series had no price)")
+    st.write(f"Days dropped because at least one series had no price: {len(dropped)}")
+    if len(dropped) > 0:
+        st.dataframe(dropped, hide_index=True)
+    st.caption("The very first day is also removed, because it has no previous day to calculate a return from.")    
+
     st.subheader("Missing values per column")
     st.dataframe(view.isna().sum().rename("missing"))
     rejected = "no update recorded yet" if last_log is None else last_log["rows_rejected"]

@@ -117,3 +117,14 @@ def lag_correlation(data, other, max_lag=5):
     for k in range(max_lag + 1):
         values[k] = data["XAUUSD_ret"].corr(data[other + "_ret"].shift(k))
     return pd.Series(values, name="correlation")
+
+def dropped_days(prices):
+    """Days that have a price for some symbols but not for all of them.
+    prepare() removes these days, so we list them here."""
+    wide = prices.pivot(index="date", columns="symbol", values="close")
+    gaps = wide[config.SYMBOLS].isna()          # True where a price is missing
+    gaps = gaps[gaps.any(axis=1)]               # keep only the days with a gap
+    rows = []
+    for day, row in gaps.iterrows():
+        rows.append({"date": day, "missing": ", ".join(row.index[row])})
+    return pd.DataFrame(rows, columns=["date", "missing"])

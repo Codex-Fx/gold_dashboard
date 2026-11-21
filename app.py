@@ -155,8 +155,14 @@ with tab2:
     order = list(analysis.PERIODS)
 
     st.subheader("Change over each period (%)")
-    change_table = periods.pivot(index="period", columns="series", values="change_pct")
-    st.bar_chart(change_table.loc[order, analysis.SERIES])
+    figure = px.bar(
+        periods, x="period", y="change_pct", color="series", barmode="group",
+        category_orders={"period": order, "series": analysis.SERIES},
+        color_discrete_map={"XAUUSD": "#83C9FF", "AUDUSD": "#0068C9",
+                            "USDJPY": "#FFABAB", "DXY": "#FF2B2B"},
+        labels={"change_pct": "% change"},
+    )
+    st.plotly_chart(figure)
 
     st.subheader("Annualised volatility (%)")
     vol_table = periods.pivot(index="period", columns="series", values="volatility_ann_pct")

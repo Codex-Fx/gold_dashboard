@@ -100,13 +100,46 @@ except Exception as error:
 st.sidebar.header("Filters")
 first_day = data.index.min().date()
 last_day = data.index.max().date()
-date_range = st.sidebar.date_input("Date range", value=(first_day, last_day),
-                                   min_value=first_day, max_value=last_day)
+
+# quick range buttons: each one sets the date range below
+RANGES = {
+    "7 days": pd.DateOffset(days=7),
+    "1 month": pd.DateOffset(months=1),
+    "3 months": pd.DateOffset(months=3),
+    "6 months": pd.DateOffset(months=6),
+    "12 months": pd.DateOffset(months=12),
+    "Whole history": None,
+}
+
+
+def set_range(offset, first_day, last_day):
+    if offset is None:
+        start = first_day
+    else:
+        start = max(first_day, (pd.Timestamp(last_day) - offset).date())
+    st.session_state["date_range"] = (start, last_day)
+
+
+# when new data arrives (the last day changes), go back to the whole history
+if st.session_state.get("last_seen_day") != last_day:
+    st.session_state["last_seen_day"] = last_day
+    st.session_state["date_range"] = (first_day, last_day)
+
+button_columns = st.sidebar.columns(2)
+for number, (label, offset) in enumerate(RANGES.items()):
+    button_columns[number % 2].button(label, key="range_" + label, on_click=set_range,
+                                      args=(offset, first_day, last_day))
+
+date_range = st.sidebar.date_input("Date range", min_value=first_day, max_value=last_day,
+                                   key="date_range")
 if len(date_range) != 2:
     st.info("Pick a start date and an end date.")
     st.stop()
 
 view = data.loc[str(date_range[0]):str(date_range[1])]
+if len(view) < 5:
+    st.warning("Please select at least 5 days of data.")
+    st.stop()
 
 window = st.sidebar.slider("Rolling correlation window (days)", 30, 120, 60)
 
@@ -126,7 +159,7 @@ for column, name in zip(columns, analysis.SERIES):
     change = (latest / previous - 1) * 100
     column.metric(name, f"{latest:,.{DECIMALS[name]}f}", f"{change:+.2f}% vs prev close")
 
-st.caption(f"Prices As of {view.index[-1].date()} ")
+st.caption(f"Prices as of {view.index[-1].date()} close")
 
 # ---------------- tabs ----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs(

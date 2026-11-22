@@ -4,6 +4,7 @@ import threading
 
 import pandas as pd
 import plotly.express as px
+import requests
 import streamlit as st
 
 st.set_page_config(page_title="Gold vs FX dashboard", layout="wide")
@@ -11,7 +12,7 @@ st.set_page_config(page_title="Gold vs FX dashboard", layout="wide")
 # On Streamlit Cloud the keys are stored in "Secrets". Copy them to environment variables
 # BEFORE importing config. On your own computer the .env file is used instead.
 try:
-    for key in ["MASSIVE_API_KEY", "SUPABASE_URL", "SUPABASE_KEY"]:
+    for key in ["MASSIVE_API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "GOLD_API_KEY" ]:
         if key in st.secrets:
             os.environ[key] = st.secrets[key]
 except Exception:
@@ -37,6 +38,26 @@ def get_data():
 def get_last_log():
     return db.get_last_log()
 
+@st.cache_data(ttl=60)   # one API call per minute for ALL visitors = max 60 calls per hour
+def get_live_gold():
+    url = "https://goldapi.dev/api/v1/price/XAU/USD"
+    headers = {"X-API-Key": os.getenv("GOLD_API_KEY")}
+    answer = requests.get(url, headers=headers, timeout=10)
+    answer.raise_for_status()
+    data = answer.json()
+    return float(data["price"]), data["updatedAt"]
+
+
+@st.fragment(run_every=60)   # only this small part refreshes by itself every 60 seconds
+def show_live_gold(last_close, last_date):
+    try:
+        price, updated = get_live_gold()
+        change = (price / last_close - 1) * 100
+        st.metric("XAUUSD live price", f"{price:,.2f}", f"{change:+.2f}% vs prev close")
+        st.caption(f"Source update time: {updated}")
+    except Exception:
+        st.metric("XAUUSD (last close)", f"{last_close:,.2f}")
+        st.caption(f"Live price is not available right now. Showing the Massive close of {last_date}.")
 
 @st.cache_resource
 def update_state():
@@ -154,6 +175,12 @@ if st.sidebar.button("Reload from Database"):
 
 # ---------------- header ----------------
 st.title("Gold (XAUUSD) vs AUDUSD, USDJPY and DXY")
+today = pd.Timestamp.now(tz="UTC").date()
+if data.index[-1].date() >= today:   # today's bar is still open, so use the day before live price 
+    ref_close, ref_date = data["XAUUSD"].iloc[-2], data.index[-2].date()
+else:
+    ref_close, ref_date = data["XAUUSD"].iloc[-1], data.index[-1].date()
+show_live_gold(ref_close, ref_date)
 
 columns = st.columns(4)
 for column, name in zip(columns, analysis.SERIES):
@@ -227,7 +254,7 @@ with tab5:
     st.write(f"Days dropped because at least one series had no price: {len(dropped)}")
     if len(dropped) > 0:
         st.dataframe(dropped, hide_index=True)
-        
+
     st.subheader("Missing values per column")
     st.dataframe(view.isna().sum().rename("missing"))
     rejected = "no update recorded yet" if last_log is None else last_log["rows_rejected"]

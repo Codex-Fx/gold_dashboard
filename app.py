@@ -49,12 +49,14 @@ def get_live_gold():
 
 
 @st.fragment(run_every=60)   # only this small part refreshes by itself every 60 seconds
-def show_live_gold(last_close, last_date):
+@st.fragment(run_every=60)   # only this small part refreshes by itself every 60 seconds
+def show_live_gold(last_close, last_date, ref_close):
     try:
         price, updated = get_live_gold()
-        change = (price / last_close - 1) * 100
+        change = (price / ref_close - 1) * 100
         st.metric("XAUUSD live price", f"{price:,.2f}", f"{change:+.2f}% vs prev close")
-        st.caption(f"Source update time: {updated}")
+        st.caption(f"Source update time: {updated} . The percentage compares this live price "
+                   f"with Massive's earlier close, so it is only approximate.")
     except Exception:
         st.metric("XAUUSD (last close)", f"{last_close:,.2f}")
         st.caption(f"Live price is not available right now. Showing the Massive close of {last_date}.")
@@ -175,12 +177,7 @@ if st.sidebar.button("Reload from Database"):
 
 # ---------------- header ----------------
 st.title("Gold (XAUUSD) vs AUDUSD, USDJPY and DXY")
-today = pd.Timestamp.now(tz="UTC").date()
-if data.index[-1].date() >= today:   # today's bar is still open, so use the day before live price 
-    ref_close, ref_date = data["XAUUSD"].iloc[-2], data.index[-2].date()
-else:
-    ref_close, ref_date = data["XAUUSD"].iloc[-1], data.index[-1].date()
-show_live_gold(ref_close, ref_date)
+show_live_gold(data["XAUUSD"].iloc[-1], data.index[-1].date(), data["XAUUSD"].iloc[-2])
 
 columns = st.columns(4)
 for column, name in zip(columns, analysis.SERIES):

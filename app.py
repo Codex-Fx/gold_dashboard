@@ -26,7 +26,7 @@ DECIMALS = {"XAUUSD": 3, "AUDUSD": 5, "USDJPY": 3, "DXY": 3}
 
 
 # ---------------- helpers ----------------
-@st.cache_data(ttl=300)   # keep the data for 5 minutes, then read Supabase again
+@st.cache_data(ttl=300, show_spinner="Loading data...")
 def get_data():
     prices = db.load_prices()
     if prices.empty:
@@ -34,11 +34,11 @@ def get_data():
     return analysis.prepare(prices), analysis.dropped_days(prices)
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30, show_spinner=False)
 def get_last_log():
     return db.get_last_log()
 
-@st.cache_data(ttl=60)   # one API call per minute for ALL visitors = max 60 calls per hour
+@st.cache_data(ttl=60, show_spinner=False)   # one API call per minute for ALL visitors = max 60 calls per hour
 def get_live_gold():
     url = "https://goldapi.dev/api/v1/price/XAU/USD"
     headers = {"X-API-Key": os.getenv("GOLD_API_KEY")}
@@ -49,18 +49,14 @@ def get_live_gold():
 
 
 @st.fragment(run_every=60)   # only this small part refreshes by itself every 60 seconds
-@st.fragment(run_every=60)   # only this small part refreshes by itself every 60 seconds
-def show_live_gold(last_close, last_date, ref_close):
+def show_live_gold(last_close, last_date):
     try:
         price, updated = get_live_gold()
-        change = (price / ref_close - 1) * 100
-        st.metric("XAUUSD live price", f"{price:,.2f}", f"{change:+.2f}% vs prev close")
-        st.caption(f"Source update time: {updated} . The percentage compares this live price "
-                   f"with Massive's earlier close, so it is only approximate.")
+        st.metric("XAUUSD live price", f"{price:,.2f}")
+        st.caption(f"Source update time: {updated}")
     except Exception:
         st.metric("XAUUSD (last close)", f"{last_close:,.2f}")
         st.caption(f"Live price is not available right now. Showing the Massive close of {last_date}.")
-
 @st.cache_resource
 def update_state():
     return {"running": False}   # shared by all visitors, so two updates never run at once
@@ -177,7 +173,7 @@ if st.sidebar.button("Reload from Database"):
 
 # ---------------- header ----------------
 st.title("Gold (XAUUSD) vs AUDUSD, USDJPY and DXY")
-show_live_gold(data["XAUUSD"].iloc[-1], data.index[-1].date(), data["XAUUSD"].iloc[-2])
+show_live_gold(data["XAUUSD"].iloc[-1], data.index[-1].date())
 
 columns = st.columns(4)
 for column, name in zip(columns, analysis.SERIES):
